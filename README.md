@@ -1,6 +1,8 @@
 # MR Stylist
-[M]ultimodal [R]AG Stylist
+**[M]**ultimodal **[R]**AG **Stylist** is my (prototype) clothing recommender built using Gemini.
 
+
+## Setup
 - download images:
 ```
 wget https://storage.googleapis.com/public-file-server/genai-downloads/mr-stylist-images.tar.gz
@@ -11,12 +13,15 @@ wget https://storage.googleapis.com/public-file-server/genai-downloads/mr-stylis
 **NOTE 2:** the `people/` folder contains images of celebrities/clothing models, but again, please feel free to Google search your own
 
 
-
-## Create Vector Embeddings for Wardrobe
+### Create Vector Embeddings for Wardrobe
 `embed_wardrobe.py` will create vector embeddings of each piece of clothing in the `images/` folder and write it to a CSV file
 
 `recommender.py` takes 2 arguments, the first is an image of a model/celeb/influencer you would like to replicate the "look" of. The second is the number of results you would like to see (i.e. `1` for top result)
 
+You can optionally download the wardrobe embeddings I created here:
+```
+wget https://storage.googleapis.com/public-file-server/genai-downloads/mywardrobe.csv
+```
 
 ## TODO
 A lot...

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>MR Stylist</title>
+</head>
+<body>
+
+<div class="container">
+<div class="row">
+  <h2>Upload an image of an outfit you'd like to replicate (JPG/JPEG)</h2>
+  <form method="post" action="/" enctype="multipart/form-data">
+    <dl>
+      <p>
+        <input type="file" name="file" class="form-control" autocomplate="off" required>
+      </p>
+    </dl>
+    <p>
+      <input type="submit" value="Submit" class="btn btn-info">
+    </p>
+  </form>
+
+  {% for item in recommended_images %}
+    <li><img src="{{ item }}" height="600"></li>
+  {% endfor %}
+
+
+<style>
+.footer {
+position: fixed;
+left: 10px;
+bottom: 25px;
+right: 10px;
+width: 95%;
+text-align: center;
+}
+</style>
+
+</body>
+</html>

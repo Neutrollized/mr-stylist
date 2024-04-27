@@ -139,7 +139,7 @@ image_metadata_df = pd.DataFrame(columns=(
   'image_description_text_embedding',
 ))
 
-image_uri_path = 'images/'
+image_uri_path = 'static/images/'
 image_count = 0
 
 for image in list(glob.glob(image_uri_path + '/' + '*.JPG')):
@@ -165,7 +165,7 @@ for image in list(glob.glob(image_uri_path + '/' + '*.JPG')):
   time.sleep(3)		# to avoid hitting Gemini quota
  
 
-image_metadata_df.to_csv('mywardrobe.csv')
+image_metadata_df.to_csv('mywardrobe_v1.csv')
 
 
 print(image_metadata_df)

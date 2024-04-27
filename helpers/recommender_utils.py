@@ -4,6 +4,31 @@ import pandas as pd
 import numpy as np
 from numpy.linalg import norm
 
+
+def any_list_element_in_string(clothing_list: list, string: str) -> int:
+  """
+  This function checks if any element from list is present in the given string.
+
+  Args:
+      clothing_list: A list of elements (also lists) to search for.
+      string: The string to search within.
+
+  Returns:
+      int: the number of different clothing types in string
+  """
+
+  list_membership_count = 0
+  # Iterate through each element in list1
+  for list in clothing_list:
+    # Check if the element is present in the string (case-sensitive)
+    if any(element in string for element in list):
+      list_membership_count += 1
+
+  # If no element is found, return False
+  return list_membership_count
+
+
+
 def get_cosine_score(
     dataframe: pd.DataFrame, column_name: str, input_text_embd: np.ndarray
 ) -> float:
@@ -31,10 +56,11 @@ def get_cosine_score(
 
 
 
-def filter_results(results: dict):
+def show_filter_results(results: dict):
   for item in results:
     #print("item:", item)
     image_uri=results[item]['image_uri']
     print("image_uri:", image_uri)
     image=PIL_Image.open(image_uri)
     image.show()
+

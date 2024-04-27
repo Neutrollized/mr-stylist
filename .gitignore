@@ -3,3 +3,4 @@
 *.csv
 images/
 people/
+.DS_Store
