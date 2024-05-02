@@ -3,6 +3,8 @@
 
 This prototype can easily be adapted for furniture/interior designs and perhaps groceries to provide alternatives for recipes.
 
+`v0.3.0` is being submitted for the **Devpost/Google AI Hackathon**.  I've posted a [demo on YouTube](https://www.youtube.com/watch?v=g3WcuO87FUI&ab_channel=GlenYu).
+
 
 ## Setup
 - enable Google Cloud APIs:
