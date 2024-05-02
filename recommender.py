@@ -31,7 +31,7 @@ if "google.colab" not in sys.modules:
         ["gcloud", "config", "get-value", "project"], text=True
     ).strip()
 
-#print(f"Your project ID is: {PROJECT_ID}")
+print(f"Your project ID is: {PROJECT_ID}")
 
 
 vertexai.init(project=PROJECT_ID, location=LOCATION)
@@ -239,7 +239,6 @@ def get_reference_image_description(image_filename: str) -> list:
       "Can you describe the clothes in the photo, including style, color, and any designs?  Make sure to only describe each individual article of clothing, and give a separate response.",
        image
     ],
-#    model='models/text-embedding-004',
     generation_config=generation_config
   )
 
@@ -258,7 +257,6 @@ from vertexai.vision_models import Image as vision_model_Image
 from vertexai.vision_models import MultiModalEmbeddingModel
 
 # for embedding
-#text_embedding_model = TextEmbeddingModel.from_pretrained("textembedding-gecko@latest")
 text_embedding_model = TextEmbeddingModel.from_pretrained("textembedding-gecko@003")
 multimodal_embedding_model = MultiModalEmbeddingModel.from_pretrained(
     "multimodalembedding@001"
@@ -269,28 +267,37 @@ multimodal_embedding_model = MultiModalEmbeddingModel.from_pretrained(
 # skipping first column as that's an additional column number
 # GOTCHA: the column in the CSV that gets read in is read as a string rather than a list of vectors :(
 image_metadata_df_csv = pd.read_csv("mywardrobe.csv",converters={"image_description_text_embedding": lambda x: x.strip("[]").split(", ")})
-#print(image_metadata_df_csv)
 print('=== FINDING BEST MATCHES... ===')
 
-queries = get_reference_image_description(sys.argv[1])
 
-
+# list of clothing type and common words associated with each
+# used to determine if multiple clothing types are referenced in the same description
 hat_word_list=[' hat', ' cap', ' fedora', ' beanie']
 jacket_word_list=[' jacket', ' coat', ' parka', ' blazer', ' vest']
 sweater_word_list=[' sweater', ' hoodie']
-shirt_word_list=[' t-shirt', ' shirt']
-pant_word_list=[' pants', ' jeans', ' sweatpants', ' shorts', ' chinos']
-shoe_word_list=[' shoes', ' sneakers']
-  
+shirt_word_list=[' t-shirt', ' shirt', ' tank top']
+pant_word_list=[' pants', ' jeans', ' sweatpants', ' shorts', ' chinos', ' khakis']
+shoe_word_list=[' shoes', ' sneakers', ' loafers', ' clogs']
 clothing_list=[hat_word_list, jacket_word_list, sweater_word_list, shirt_word_list, pant_word_list, shoe_word_list]
 
 
-# filter out responses that have more than 1 clothing type listed
-for query in queries:
-  num_clothing_types=any_list_element_in_string(clothing_list, query)
-  if num_clothing_types > 1:
-    print(num_clothing_types, query)
-    queries.remove(query)
+# add a retry for generating descriptions
+# try to ensure it generates separate descriptions for each article of clothing
+retry_count = 0
+while retry_count < 5:
+  queries = get_reference_image_description(sys.argv[1])
+
+  # filter out responses that have more than 1 clothing type listed
+  for query in queries:
+    num_clothing_types=any_list_element_in_string(clothing_list, query)
+    if num_clothing_types > 1:
+      print("INFO: ", num_clothing_types, query)
+      queries.remove(query)
+
+  if len(queries) == 0:
+    retry_count += 1
+  else:
+    break
 
 
 item_num = 0

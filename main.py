@@ -30,8 +30,6 @@ if "google.colab" not in sys.modules:
         ["gcloud", "config", "get-value", "project"], text=True
     ).strip()
 
-#print(f"Your project ID is: {PROJECT_ID}")
-
 
 vertexai.init(project=PROJECT_ID, location=LOCATION)
 
@@ -116,14 +114,6 @@ def get_text_embedding_from_text_embedding_model(
     return text_embedding
 
 
-def gemini_model_text_embed(text: str) -> list[float]:
-    embedding = genai.embed_content(model="models/text-embedding-004",
-                                    content=text,
-                                    task_type="retrieval_query")
-
-    return embedding["embedding"]
-
-
 def get_similar_text_from_query(
     query: str,
     text_metadata_df: pd.DataFrame,
@@ -154,7 +144,6 @@ def get_similar_text_from_query(
     if column_name not in text_metadata_df.columns:
         raise KeyError(f"Column '{column_name}' not found in the 'text_metadata_df'")
 
-    #query_vector = get_user_query_text_embeddings(query)
     query_vector = get_text_embedding_from_text_embedding_model(text=query)
 
     # Calculate cosine similarity between query text and metadata text
@@ -234,7 +223,6 @@ def get_reference_image_description(image_filename: str) -> list:
 
   response = multimodal_model.generate_content(
     [
-      #"Can you describe the clothes in the photo, including style, color, and any designs?  Make sure not to describe the outfit as a whole.   For each article of clothing, give a separate response.",
       "Can you describe the clothes in the photo, including style, color, and any designs?  Make sure to only describe each individual article of clothing, and give a separate response.",
        image
     ],
@@ -256,19 +244,12 @@ from vertexai.vision_models import Image as vision_model_Image
 from vertexai.vision_models import MultiModalEmbeddingModel
 
 # for embedding
-#text_embedding_model = TextEmbeddingModel.from_pretrained("textembedding-gecko@latest")
 text_embedding_model = TextEmbeddingModel.from_pretrained("textembedding-gecko@003")
 multimodal_embedding_model = MultiModalEmbeddingModel.from_pretrained(
     "multimodalembedding@001"
 )
 
-
-# CSV more precise than JSON
-# skipping first column as that's an additional column number
-# GOTCHA: the column in the CSV that gets read in is read as a string rather than a list of vectors :(
 image_metadata_df_csv = pd.read_csv("mywardrobe.csv",converters={"image_description_text_embedding": lambda x: x.strip("[]").split(", ")})
-print('=== FINDING BEST MATCHES... ===')
-
 
 
 #--------------
@@ -276,7 +257,6 @@ print('=== FINDING BEST MATCHES... ===')
 #--------------
 from flask import Flask, render_template, request, redirect
 from tempfile import NamedTemporaryFile
-#from werkzeug.utils import secure_filename
 import os, logging
 
 app = Flask(__name__, static_url_path='')
@@ -322,21 +302,32 @@ def upload() -> str:
     pass
 
   uploaded_file.save(os.path.join(UPLOAD_FOLDER, uploaded_file.filename))
-  queries = get_reference_image_description(UPLOAD_FOLDER + uploaded_file.filename)
 
   hat_word_list=[' hat', ' cap', ' fedora', ' beanie']
   jacket_word_list=[' jacket', ' coat', ' parka', ' blazer', ' vest']
   sweater_word_list=[' sweater', ' hoodie']
-  shirt_word_list=[' t-shirt', ' shirt']
-  pant_word_list=[' pants', ' jeans', ' sweatpants', ' shorts', ' chinos']
-  shoe_word_list=[' shoes', ' sneakers']
-
+  shirt_word_list=[' t-shirt', ' shirt', ' tank top']
+  pant_word_list=[' pants', ' jeans', ' sweatpants', ' shorts', ' chinos', ' khakis']
+  shoe_word_list=[' shoes', ' sneakers', ' loafers', ' clogs']
   clothing_list=[hat_word_list, jacket_word_list, sweater_word_list, shirt_word_list, pant_word_list, shoe_word_list]
 
-  for query in queries:
-    num_clothing_types=any_list_element_in_string(clothing_list, query)
-    if num_clothing_types > 1:
-      queries.remove(query)
+  # add a retry for generating descriptions
+  # try to ensure it generates separate descriptions for each article of clothing
+  retry_count = 0
+  while retry_count < 5:
+    queries = get_reference_image_description(UPLOAD_FOLDER + uploaded_file.filename)
+
+    # filter out responses that have more than 1 clothing type listed
+    for query in queries:
+      num_clothing_types=any_list_element_in_string(clothing_list, query)
+      if num_clothing_types > 1:
+        queries.remove(query)
+
+    if len(queries) == 0:
+      retry_count += 1
+    else:
+      break
+
 
   item_num = 0
   recommended_images=[]
@@ -353,7 +344,6 @@ def upload() -> str:
     # strip the 'static/' the filepath
     recommended_images.append(image_uri.replace('static/', ''))
 
-  #print(recommended_images)
   os.remove(UPLOAD_FOLDER + uploaded_file.filename)
   return render_template('index.html', recommended_images=recommended_images)
 

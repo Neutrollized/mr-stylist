@@ -27,7 +27,7 @@ if "google.colab" not in sys.modules:
         ["gcloud", "config", "get-value", "project"], text=True
     ).strip()
 
-#print(f"Your project ID is: {PROJECT_ID}")
+print(f"Your project ID is: {PROJECT_ID}")
 
 
 vertexai.init(project=PROJECT_ID, location=LOCATION)
@@ -59,10 +59,6 @@ def generate_text(image_uri: str, prompt: str) -> str:
     # Query the model
     response = multimodal_model.generate_content(
         [
-            # Add an example image
-#            Part.from_uri(
-#                "gs://generativeai-downloads/images/scones.jpg", mime_type="image/jpeg"
-#            ),
             Part.from_image(Image.load_from_file(image_uri)),
             prompt,
         ],
@@ -116,21 +112,6 @@ multimodal_embedding_model = MultiModalEmbeddingModel.from_pretrained(
 )
 
 
-#image_metadata_df_json = pd.read_json('mywardrobe.json')
-#print('DF from JSON')
-#print(image_metadata_df_json)
-
-# CSV more precise than JSON
-# skipping first column as that's an additional column number
-#image_metadata_df_csv = pd.read_csv('mywardrobe.csv', usecols=range(1, 5))
-#print('DF from CSV')
-#print(image_metadata_df_csv)
-
-
-#image_description_prompt = """Describe the clothing shown in the image.
-#Describe type, style, color and any designs on the clothing.
-#"""
-
 image_description_prompt = "Provide a few sentences describing the clothing's type, color, and style."
 
 image_metadata_df = pd.DataFrame(columns=(
@@ -165,7 +146,6 @@ for image in list(glob.glob(image_uri_path + '/' + '*.JPG')):
   time.sleep(3)		# to avoid hitting Gemini quota
  
 
-image_metadata_df.to_csv('mywardrobe_v1.csv')
-
+image_metadata_df.to_csv('mywardrobe.csv')
 
 print(image_metadata_df)

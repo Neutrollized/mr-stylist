@@ -45,20 +45,24 @@ def get_cosine_score(
     """
 
     float_list = [float(i) for i in dataframe[column_name]]
-    #print(float_list)
-
-    #text_cosine_score = round(np.dot(dataframe[column_name], input_text_embd), 2)
-    #text_cosine_score = round(np.dot(float_list, input_text_embd), 2)
     text_cosine_score = np.dot(float_list, input_text_embd)/(norm(float_list)*norm(input_text_embd))
-    #print('TEXT_COSINE_SCORE', text_cosine_score)
 
     return text_cosine_score
 
 
 
 def show_filter_results(results: dict):
+  """
+  Displays image of the returned results
+
+  Args:
+      results: dictionary (JSON) of clothing in catalogue/wardrobe
+
+  Returns:
+      None
+  """
+
   for item in results:
-    #print("item:", item)
     image_uri=results[item]['image_uri']
     print("image_uri:", image_uri)
     image=PIL_Image.open(image_uri)
