@@ -32,8 +32,14 @@ print(f"Your project ID is: {PROJECT_ID}")
 
 vertexai.init(project=PROJECT_ID, location=LOCATION)
 
-text_model = GenerativeModel("gemini-1.0-pro")
-multimodal_model = GenerativeModel("gemini-1.0-pro-vision")
+#text_model = GenerativeModel("gemini-1.0-pro")
+multimodal_model = GenerativeModel(
+        "gemini-1.5-pro-002",
+        system_instruction=[
+            "You are a fashion stylist.",
+            "Your mission is to describe the clothing you see.",
+        ],
+)
 
 
 #-----------------------------------------
@@ -106,7 +112,8 @@ from vertexai.language_models import TextEmbeddingModel
 from vertexai.vision_models import Image as vision_model_Image
 from vertexai.vision_models import MultiModalEmbeddingModel
 
-text_embedding_model = TextEmbeddingModel.from_pretrained("textembedding-gecko@latest")
+#text_embedding_model = TextEmbeddingModel.from_pretrained("textembedding-gecko@003")
+text_embedding_model = TextEmbeddingModel.from_pretrained("text-embedding-005")
 multimodal_embedding_model = MultiModalEmbeddingModel.from_pretrained(
     "multimodalembedding@001"
 )
@@ -143,7 +150,7 @@ for image in list(glob.glob(image_uri_path + '/' + '*.JPG')):
   
   image_metadata_df.loc[image_count] = [IMAGE, description_text, image_description_text_embedding]
   image_count += 1
-  time.sleep(3)		# to avoid hitting Gemini quota
+  time.sleep(10)		# to avoid hitting Gemini quota
  
 
 image_metadata_df.to_csv('mywardrobe.csv')
