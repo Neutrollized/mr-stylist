@@ -17,6 +17,13 @@ from helpers.recommender_utils import any_list_element_in_string
 from helpers.recommender_utils import get_cosine_score
 from helpers.recommender_utils import show_filter_results
 
+
+#-----------------------------------
+# Variables
+#-----------------------------------
+COSINE_SCORE_THRESHOLD = 0.6
+
+
 #-----------------------------------
 # Initialize Vertex AI & Gemini
 #-----------------------------------
@@ -196,13 +203,13 @@ def get_similar_text_from_query(
 
         # Store cosine score
         final_text[matched_textno]["cosine_score"] = top_n_scores[matched_textno]
-        print(top_n_scores[matched_textno])
+        #print(top_n_scores[matched_textno])
 
     # Optionally print citations immediately
     if print_citation:
         print_text_to_text_citation(final_text, chunk_text=chunk_text)
 
-    if top_n_scores[matched_textno] < 0.6:  # if cosine score is < threshold, return no matches/empty dict
+    if top_n_scores[matched_textno] < COSINE_SCORE_THRESHOLD:  # if cosine score is < threshold, return no matches/empty dict
         return {}
 
     return final_text
