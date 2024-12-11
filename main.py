@@ -33,9 +33,14 @@ if "google.colab" not in sys.modules:
 
 vertexai.init(project=PROJECT_ID, location=LOCATION)
 
-text_model = GenerativeModel("gemini-1.0-pro")
 multimodal_model = GenerativeModel("gemini-1.0-pro-vision")
-
+#multimodal_model = GenerativeModel(
+#        "gemini-1.5-pro-002",
+#        system_instruction=[
+#            "You are a fashion stylist.",
+#            "Your mission is to describe the clothing you see.",
+#        ],
+#)
 
 #-----------------------------------------
 # Helper Functions
@@ -245,11 +250,10 @@ from vertexai.vision_models import MultiModalEmbeddingModel
 
 # for embedding
 text_embedding_model = TextEmbeddingModel.from_pretrained("textembedding-gecko@003")
-multimodal_embedding_model = MultiModalEmbeddingModel.from_pretrained(
-    "multimodalembedding@001"
-)
+#text_embedding_model = TextEmbeddingModel.from_pretrained("text-embedding-005")
 
-image_metadata_df_csv = pd.read_csv("mywardrobe.csv",converters={"image_description_text_embedding": lambda x: x.strip("[]").split(", ")})
+image_metadata_df_csv = pd.read_csv("mywardrobe_1-0-pro-vision.csv",converters={"image_description_text_embedding": lambda x: x.strip("[]").split(", ")})
+#image_metadata_df_csv = pd.read_csv("mywardrobe_1-5-pro.csv",converters={"image_description_text_embedding": lambda x: x.strip("[]").split(", ")})
 
 
 #--------------

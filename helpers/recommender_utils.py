@@ -62,9 +62,14 @@ def show_filter_results(results: dict):
       None
   """
 
-  for item in results:
-    image_uri=results[item]['image_uri']
-    print("image_uri:", image_uri)
-    image=PIL_Image.open(image_uri)
-    image.show()
+  if not bool(results):
+      print("--> NO GOOD MATCH <--")
+  else:
+    for item in results:
+      cosine_score=results[item]['cosine_score']
+      image_uri=results[item]['image_uri']
+      print("cosine_score:", cosine_score)
+      print("image_uri:", image_uri)
+      image=PIL_Image.open(image_uri)
+      image.show()
 

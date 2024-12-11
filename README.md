@@ -41,8 +41,12 @@ wget https://storage.googleapis.com/public-file-server/genai-downloads/mr-stylis
 
 You can optionally download the wardrobe embeddings I created here:
 ```
-wget https://storage.googleapis.com/public-file-server/genai-downloads/mywardrobe.csv
+wget https://storage.googleapis.com/public-file-server/genai-downloads/mywardrobe_1-0-pro-vision.csv
+
+wget https://storage.googleapis.com/public-file-server/genai-downloads/mywardrobe_1-5-pro.csv
 ```
+
+The Gemini 1.0 Pro Vision version is currently being used by `main.py` but you can also test the Gemini 1.5 Pro version (but you will have to also make adjustments to the script)
 
 
 ### How to run

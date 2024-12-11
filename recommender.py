@@ -17,6 +17,13 @@ from helpers.recommender_utils import any_list_element_in_string
 from helpers.recommender_utils import get_cosine_score
 from helpers.recommender_utils import show_filter_results
 
+
+#-----------------------------------
+# Variables
+#-----------------------------------
+COSINE_SCORE_THRESHOLD = 0.6
+
+
 #-----------------------------------
 # Initialize Vertex AI & Gemini
 #-----------------------------------
@@ -31,14 +38,22 @@ if "google.colab" not in sys.modules:
         ["gcloud", "config", "get-value", "project"], text=True
     ).strip()
 
-print(f"Your project ID is: {PROJECT_ID}")
+#print(f"Your project ID is: {PROJECT_ID}")
 
 
 vertexai.init(project=PROJECT_ID, location=LOCATION)
 
-text_model = GenerativeModel("gemini-1.0-pro")
-multimodal_model = GenerativeModel("gemini-1.0-pro-vision")
-
+#multimodal_model = GenerativeModel("gemini-1.0-pro-vision")
+#multimodal_model = GenerativeModel("gemini-1.5-pro-002")
+#multimodal_model = GenerativeModel("gemini-1.5-flash-002")
+multimodal_model = GenerativeModel(
+        #"gemini-1.5-flash-002",
+        "gemini-1.5-pro-002",
+        system_instruction=[
+            "You are a fashion stylist.",
+            "Your mission is to describe the clothing you see.",
+        ],
+)
 
 #-----------------------------------------
 # Helper Functions
@@ -119,7 +134,7 @@ def get_text_embedding_from_text_embedding_model(
 
 
 def gemini_model_text_embed(text: str) -> list[float]:
-    embedding = genai.embed_content(model="models/text-embedding-004",
+    embedding = genai.embed_content(model="models/text-embedding-005",
                                     content=text,
                                     task_type="retrieval_query")
 
@@ -181,21 +196,21 @@ def get_similar_text_from_query(
         final_text[matched_textno] = {}
 
         # Store page number
-        final_text[matched_textno]["image_uri"] = text_metadata_df.iloc[index][
-            "image_uri"
-        ]
+        final_text[matched_textno]["image_uri"] = text_metadata_df.iloc[index]["image_uri"]
 
         # Store page number
-        final_text[matched_textno]["image_description_text"] = text_metadata_df.iloc[index][
-            "image_description_text"
-        ]
+        final_text[matched_textno]["image_description_text"] = text_metadata_df.iloc[index]["image_description_text"]
 
         # Store cosine score
         final_text[matched_textno]["cosine_score"] = top_n_scores[matched_textno]
+        #print(top_n_scores[matched_textno])
 
     # Optionally print citations immediately
     if print_citation:
         print_text_to_text_citation(final_text, chunk_text=chunk_text)
+
+    if top_n_scores[matched_textno] < COSINE_SCORE_THRESHOLD:  # if cosine score is < threshold, return no matches/empty dict
+        return {}
 
     return final_text
 
@@ -257,16 +272,15 @@ from vertexai.vision_models import Image as vision_model_Image
 from vertexai.vision_models import MultiModalEmbeddingModel
 
 # for embedding
-text_embedding_model = TextEmbeddingModel.from_pretrained("textembedding-gecko@003")
-multimodal_embedding_model = MultiModalEmbeddingModel.from_pretrained(
-    "multimodalembedding@001"
-)
+#text_embedding_model = TextEmbeddingModel.from_pretrained("textembedding-gecko@003")
+text_embedding_model = TextEmbeddingModel.from_pretrained("text-embedding-005")
 
 
 # CSV more precise than JSON
 # skipping first column as that's an additional column number
 # GOTCHA: the column in the CSV that gets read in is read as a string rather than a list of vectors :(
-image_metadata_df_csv = pd.read_csv("mywardrobe.csv",converters={"image_description_text_embedding": lambda x: x.strip("[]").split(", ")})
+#image_metadata_df_csv = pd.read_csv("mywardrobe_1-0-pro-vision.csv",converters={"image_description_text_embedding": lambda x: x.strip("[]").split(", ")})
+image_metadata_df_csv = pd.read_csv("mywardrobe_1-5-pro.csv",converters={"image_description_text_embedding": lambda x: x.strip("[]").split(", ")})
 print('=== FINDING BEST MATCHES... ===')
 
 
@@ -306,7 +320,7 @@ for query in queries:
     query,
     image_metadata_df_csv,
     column_name = "image_description_text_embedding",
-    top_n=int(sys.argv[2]),
+    top_n=int(sys.argv[2]) if len(sys.argv) > 2 else int(1),
     chunk_text = False,
   )
   
