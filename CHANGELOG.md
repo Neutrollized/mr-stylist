@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [0.4.0] - 2024-12-11
 ### Added
-- `COSINE_SCORE_THRESHOLD` in `recommender.py` for to exclude poor matches (I suggest `0.6` is a reasonable starting value)
+- `COSINE_SCORE_THRESHOLD` in `recommender.py` used to exclude poor matches (I recommend `0.6` as a reasonable starting point)
 ### Changed
 - `recommender.py` uses Gemini 1.5 Flash, but `main.py` still on Gemini 1.0 Pro
 - Updated README
