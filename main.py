@@ -20,7 +20,7 @@ from helpers.recommender_utils import get_cosine_score
 # Initialize Vertex AI & Gemini
 #-----------------------------------
 PROJECT_ID = os.environ.get('MY_PROJECT_ID')  # @param {type:"string"}
-LOCATION = "northamerica-northeast1"  # @param {type:"string"}
+LOCATION = "us-central1"  # @param {type:"string"}
 
 # if not running on colab, try to get the PROJECT_ID automatically
 if "google.colab" not in sys.modules:
@@ -33,14 +33,14 @@ if "google.colab" not in sys.modules:
 
 vertexai.init(project=PROJECT_ID, location=LOCATION)
 
-multimodal_model = GenerativeModel("gemini-1.0-pro-vision")
-#multimodal_model = GenerativeModel(
-#        "gemini-1.5-pro-002",
-#        system_instruction=[
-#            "You are a fashion stylist.",
-#            "Your mission is to describe the clothing you see.",
-#        ],
-#)
+#multimodal_model = GenerativeModel("gemini-1.0-pro-vision")
+multimodal_model = GenerativeModel(
+        "gemini-2.0-flash-001",
+        system_instruction=[
+            "You are a fashion stylist.",
+            "Your mission is to describe the clothing you see.",
+        ],
+)
 
 #-----------------------------------------
 # Helper Functions
@@ -249,11 +249,11 @@ from vertexai.vision_models import Image as vision_model_Image
 from vertexai.vision_models import MultiModalEmbeddingModel
 
 # for embedding
-text_embedding_model = TextEmbeddingModel.from_pretrained("textembedding-gecko@003")
-#text_embedding_model = TextEmbeddingModel.from_pretrained("text-embedding-005")
+text_embedding_model = TextEmbeddingModel.from_pretrained("text-embedding-005")
 
-image_metadata_df_csv = pd.read_csv("mywardrobe_1-0-pro-vision.csv",converters={"image_description_text_embedding": lambda x: x.strip("[]").split(", ")})
+#image_metadata_df_csv = pd.read_csv("mywardrobe_1-0-pro-vision.csv",converters={"image_description_text_embedding": lambda x: x.strip("[]").split(", ")})
 #image_metadata_df_csv = pd.read_csv("mywardrobe_1-5-pro.csv",converters={"image_description_text_embedding": lambda x: x.strip("[]").split(", ")})
+image_metadata_df_csv = pd.read_csv("mywardrobe_2-0-flash.csv",converters={"image_description_text_embedding": lambda x: x.strip("[]").split(", ")})
 
 
 #--------------
@@ -324,7 +324,7 @@ def upload() -> str:
     # filter out responses that have more than 1 clothing type listed
     for query in queries:
       num_clothing_types=any_list_element_in_string(clothing_list, query)
-      if num_clothing_types > 1:
+      if num_clothing_types == 0:
         queries.remove(query)
 
     if len(queries) == 0:

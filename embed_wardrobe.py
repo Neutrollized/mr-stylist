@@ -17,7 +17,7 @@ from vertexai.generative_models import (
 # Initialize Vertex AI & Gemini
 #-----------------------------------
 PROJECT_ID = os.environ.get('MY_PROJECT_ID')  # @param {type:"string"}
-LOCATION = "northamerica-northeast1"  # @param {type:"string"}
+LOCATION = "us-central1"  # @param {type:"string"}
 
 # if not running on colab, try to get the PROJECT_ID automatically
 if "google.colab" not in sys.modules:
@@ -32,9 +32,8 @@ print(f"Your project ID is: {PROJECT_ID}")
 
 vertexai.init(project=PROJECT_ID, location=LOCATION)
 
-#text_model = GenerativeModel("gemini-1.0-pro")
 multimodal_model = GenerativeModel(
-        "gemini-1.5-pro-002",
+        "gemini-2.0-flash-001",
         system_instruction=[
             "You are a fashion stylist.",
             "Your mission is to describe the clothing you see.",
@@ -112,7 +111,6 @@ from vertexai.language_models import TextEmbeddingModel
 from vertexai.vision_models import Image as vision_model_Image
 from vertexai.vision_models import MultiModalEmbeddingModel
 
-#text_embedding_model = TextEmbeddingModel.from_pretrained("textembedding-gecko@003")
 text_embedding_model = TextEmbeddingModel.from_pretrained("text-embedding-005")
 multimodal_embedding_model = MultiModalEmbeddingModel.from_pretrained(
     "multimodalembedding@001"

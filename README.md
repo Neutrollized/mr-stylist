@@ -44,6 +44,8 @@ You can optionally download the wardrobe embeddings I created here:
 wget https://storage.googleapis.com/public-file-server/genai-downloads/mywardrobe_1-0-pro-vision.csv
 
 wget https://storage.googleapis.com/public-file-server/genai-downloads/mywardrobe_1-5-pro.csv
+
+wget https://storage.googleapis.com/public-file-server/genai-downloads/mywardrobe_2-0-flash.csv
 ```
 
 The Gemini 1.0 Pro Vision version is currently being used by `main.py` but you can also test the Gemini 1.5 Pro version (but you will have to also make adjustments to the script)
@@ -65,8 +67,5 @@ The second method is to run`recommender.py`, which takes 2 arguments, the first 
 ## TODO
 - tuning / improve accuracy 
 - combine with image vector embedding similarity results to produce more accurate results
-- add cosine similarity threshold
-- convert to Gemini 1.5
 - deploy to GCP resources
 - use a vector database
-- code refactor
