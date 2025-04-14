@@ -48,7 +48,7 @@ wget https://storage.googleapis.com/public-file-server/genai-downloads/mywardrob
 wget https://storage.googleapis.com/public-file-server/genai-downloads/mywardrobe_2-0-flash.csv
 ```
 
-The Gemini 1.0 Pro Vision version is currently being used by `main.py` but you can also test the Gemini 1.5 Pro version (but you will have to also make adjustments to the script)
+Currently, Gemini 2.0 Flash is being used by `main.py` as well as `recommender.py`.  Having seen the progression from Gemini 1.0 Pro Vision, to Gemini 1.5 Pro and now (most recently) Gemini 2.0 Flash, I can definitively say that I've seen an improvement in the matches, especially in the shoes department.
 
 
 ### How to run
