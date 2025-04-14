@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## [0.5.0] - 2025-04-13
 ### Changed
 - `LOCATION` changed form `northamerica-northast1` to `us-central1` for more model support
-- `recommender.py` and `main` now uses Gemini 2.0 Flash
+- `recommender.py` and `main.py` now uses Gemini 2.0 Flash
 - Updated `requirements.txt`
 ### Fixed
 - Issue with logic when parsing Gemini's description of the clothing
