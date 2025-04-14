@@ -25,7 +25,7 @@ def image_resize(filename: str, max_size: int) -> str:
 # WIP
 #-----------
 def gemini_model_text_embed(text: str) -> list[float]:
-    embedding = genai.embed_content(model="models/text-embedding-004",
+    embedding = genai.embed_content(model="models/text-embedding-005",
                                     content=text,
                                     task_type="retrieval_query")
 
