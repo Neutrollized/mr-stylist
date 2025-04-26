@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2025-04-26
+### Changed
+- Now using `genai` instead of `vertexai.language_models` for embedding
+- Updated embedding model from `text-embedding-005` to `text-embedding-large-exp-03-07`
+- Updated `requirements.txt`
+
 ## [0.5.0] - 2025-04-13
 ### Changed
 - `LOCATION` changed form `northamerica-northast1` to `us-central1` for more model support

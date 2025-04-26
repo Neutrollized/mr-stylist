@@ -12,6 +12,9 @@ from vertexai.generative_models import (
     Part,
 )
 
+from google import genai
+from google.genai.types import EmbedContentConfig
+
 
 #-----------------------------------
 # Initialize Vertex AI & Gemini
@@ -69,7 +72,6 @@ def generate_text(image_uri: str, prompt: str) -> str:
         ],
         generation_config=generation_config,
     )
-    #print(response)
     return response.text
 
 
@@ -90,13 +92,22 @@ def get_text_embedding_from_text_embedding_model(
                                The format (list or NumPy array) depends on the
                                value of the 'return_array' parameter.
     """
-    embeddings = text_embedding_model.get_embeddings([text])
-    text_embedding = [embedding.values for embedding in embeddings][0]
+    client = genai.Client()
+    response = client.models.embed_content(
+        #model="text-embedding-005",
+        model="text-embedding-large-exp-03-07",
+        contents=text,
+        config=EmbedContentConfig(
+            task_type="RETRIEVAL_DOCUMENT",  # Optional
+            output_dimensionality=768,  # Optional
+        ),
+    )
+
+    text_embedding = response.embeddings[0].values
 
     if return_array:
         text_embedding = np.fromiter(text_embedding, dtype=float)
 
-    # returns 768 dimensional array
     return text_embedding
 
 
@@ -107,17 +118,7 @@ import glob
 import pandas as pd
 import time
 
-from vertexai.language_models import TextEmbeddingModel
-from vertexai.vision_models import Image as vision_model_Image
-from vertexai.vision_models import MultiModalEmbeddingModel
-
-text_embedding_model = TextEmbeddingModel.from_pretrained("text-embedding-005")
-multimodal_embedding_model = MultiModalEmbeddingModel.from_pretrained(
-    "multimodalembedding@001"
-)
-
-
-image_description_prompt = "Provide a few sentences describing the clothing's type, color, and style."
+image_description_prompt = "Provide a few sentences describing the clothing's type, color, style and design."
 
 image_metadata_df = pd.DataFrame(columns=(
   'image_uri',
@@ -136,19 +137,14 @@ for image in list(glob.glob(image_uri_path + '/' + '*.JPG')):
     image_uri=IMAGE,
     prompt=image_description_prompt,
   )
-#  print(description_text)
-
 
   image_description_text_embedding = (
     get_text_embedding_from_text_embedding_model(text=description_text)
   )
-  #print('IMAGE TEXT EMBEDDING')
-  #print(image_description_text_embedding)
-  #print(len(image_description_text_embedding))
   
   image_metadata_df.loc[image_count] = [IMAGE, description_text, image_description_text_embedding]
   image_count += 1
-  time.sleep(10)		# to avoid hitting Gemini quota
+  time.sleep(8)		# to avoid hitting Gemini quota
  
 
 image_metadata_df.to_csv('mywardrobe.csv')

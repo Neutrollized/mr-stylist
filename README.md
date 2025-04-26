@@ -39,13 +39,13 @@ wget https://storage.googleapis.com/public-file-server/genai-downloads/mr-stylis
 ### Create Vector Embeddings for Wardrobe 
 `embed_wardrobe.py` will create vector embeddings of each piece of clothing in the `static/images/` folder and write it to a CSV file. This is inefficient and for prototyping/local testing purposes only. Future state will include a vector database deployed in the cloud (GCP).
 
-You can optionally download the wardrobe embeddings I created here:
+You can optionally download the wardrobe embeddings I created here and rename the file to `mywardrobe.csv`:
 ```
-wget https://storage.googleapis.com/public-file-server/genai-downloads/mywardrobe_1-0-pro-vision.csv
+wget https://storage.googleapis.com/public-file-server/genai-downloads/mywardrobe_1-0-pro-vision_768.csv
 
-wget https://storage.googleapis.com/public-file-server/genai-downloads/mywardrobe_1-5-pro.csv
+wget https://storage.googleapis.com/public-file-server/genai-downloads/mywardrobe_1-5-pro_768.csv
 
-wget https://storage.googleapis.com/public-file-server/genai-downloads/mywardrobe_2-0-flash.csv
+wget https://storage.googleapis.com/public-file-server/genai-downloads/mywardrobe_2-0-flash_768.csv
 ```
 
 Currently, Gemini 2.0 Flash is being used by `main.py` as well as `recommender.py`.  Having seen the progression from Gemini 1.0 Pro Vision, to Gemini 1.5 Pro and now (most recently) Gemini 2.0 Flash, I can definitively say that I've seen an improvement in the matches, especially in the shoes department.

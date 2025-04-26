@@ -12,6 +12,9 @@ from vertexai.generative_models import (
     Part,
 )
 
+from google import genai
+from google.genai.types import EmbedContentConfig
+
 from helpers.image_utils import image_resize
 from helpers.recommender_utils import any_list_element_in_string
 from helpers.recommender_utils import get_cosine_score
@@ -21,7 +24,7 @@ from helpers.recommender_utils import show_filter_results
 #-----------------------------------
 # Variables
 #-----------------------------------
-COSINE_SCORE_THRESHOLD = 0.6
+COSINE_SCORE_THRESHOLD = 0.65
 
 
 #-----------------------------------
@@ -123,22 +126,23 @@ def get_text_embedding_from_text_embedding_model(
                                The format (list or NumPy array) depends on the
                                value of the 'return_array' parameter.
     """
-    embeddings = text_embedding_model.get_embeddings([text])
-    text_embedding = [embedding.values for embedding in embeddings][0]
+    client = genai.Client()
+    response = client.models.embed_content(
+        #model="text-embedding-005",
+        model="text-embedding-large-exp-03-07",
+        contents=text,
+        config=EmbedContentConfig(
+            task_type="RETRIEVAL_DOCUMENT",
+            output_dimensionality=768,
+        )
+    )
+
+    text_embedding = response.embeddings[0].values
 
     if return_array:
         text_embedding = np.fromiter(text_embedding, dtype=float)
 
-    # returns 768 dimensional array
     return text_embedding
-
-
-def gemini_model_text_embed(text: str) -> list[float]:
-    embedding = genai.embed_content(model="models/text-embedding-005",
-                                    content=text,
-                                    task_type="retrieval_query")
-
-    return embedding["embedding"]
 
 
 def get_similar_text_from_query(
@@ -251,8 +255,8 @@ def get_reference_image_description(image_filename: str) -> list:
 
   response = multimodal_model.generate_content(
     [
-      "Can you describe the clothes in the photo, including style, color, and any designs?  Make sure to only describe each individual article of clothing, and give a separate response.",
-       image
+        "Can you describe the clothes in the photo, including type of clothing, color, style, and design.  Make sure to only describe each individual article of clothing, and give a separate response.",
+        image
     ],
     generation_config=generation_config
   )
@@ -279,7 +283,7 @@ text_embedding_model = TextEmbeddingModel.from_pretrained("text-embedding-005")
 # CSV more precise than JSON
 # skipping first column as that's an additional column number
 # GOTCHA: the column in the CSV that gets read in is read as a string rather than a list of vectors :(
-image_metadata_df_csv = pd.read_csv("mywardrobe_2-0-flash.csv",converters={"image_description_text_embedding": lambda x: x.strip("[]").split(", ")})
+image_metadata_df_csv = pd.read_csv("mywardrobe.csv",converters={"image_description_text_embedding": lambda x: x.strip("[]").split(", ")})
 print('=== FINDING BEST MATCHES... ===')
 
 
