@@ -68,8 +68,10 @@ def show_filter_results(results: dict):
     for item in results:
       cosine_score=results[item]['cosine_score']
       image_uri=results[item]['image_uri']
+      image_description=results[item]['image_description_text']
       print("cosine_score:", cosine_score)
       print("image_uri:", image_uri)
+      #print("image_description_text:", image_description)
       image=PIL_Image.open(image_uri)
       image.show()
 

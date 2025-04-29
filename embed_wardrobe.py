@@ -17,6 +17,17 @@ from google.genai.types import EmbedContentConfig
 
 
 #-----------------------------------
+# Variables
+#-----------------------------------
+GEMINI_MODEL="gemini-2.0-flash-001"
+EMBEDDING_MODEL="text-embedding-005"
+TEMPERATURE=0.1
+TOP_P=0.8
+TOP_K=25
+STYLIST_PROMPT="Provide a few sentences describing the clothing's type, color, and style"
+
+
+#-----------------------------------
 # Initialize Vertex AI & Gemini
 #-----------------------------------
 PROJECT_ID = os.environ.get('MY_PROJECT_ID')  # @param {type:"string"}
@@ -36,7 +47,7 @@ print(f"Your project ID is: {PROJECT_ID}")
 vertexai.init(project=PROJECT_ID, location=LOCATION)
 
 multimodal_model = GenerativeModel(
-        "gemini-2.0-flash-001",
+        GEMINI_MODEL,
         system_instruction=[
             "You are a fashion stylist.",
             "Your mission is to describe the clothing you see.",
@@ -55,9 +66,9 @@ from helpers.image_utils import image_resize
 # Use a more deterministic configuration with a low temperature
 # https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/gemini
 generation_config = GenerationConfig(
-    temperature=0.0,		# higher = more creative (default 0.0)
-    top_p=0.7,			# higher = more random responses, response drawn from more possible next tokens (default 0.95)
-    top_k=20,			# higher = more random responses, sample from more possible next tokens (default 40)
+    temperature=TEMPERATURE,		# higher = more creative (default 0.0)
+    top_p=TOP_P,			# higher = more random responses, response drawn from more possible next tokens (default 0.95)
+    top_k=TOP_K,			# higher = more random responses, sample from more possible next tokens (default 40)
     candidate_count=1,
     max_output_tokens=2048,
 )
@@ -94,11 +105,10 @@ def get_text_embedding_from_text_embedding_model(
     """
     client = genai.Client()
     response = client.models.embed_content(
-        #model="text-embedding-005",
-        model="text-embedding-large-exp-03-07",
+        model=EMBEDDING_MODEL,
         contents=text,
         config=EmbedContentConfig(
-            task_type="RETRIEVAL_DOCUMENT",  # Optional
+            task_type="RETRIEVAL_QUERY",  # Optional
             output_dimensionality=768,  # Optional
         ),
     )
@@ -118,7 +128,7 @@ import glob
 import pandas as pd
 import time
 
-image_description_prompt = "Provide a few sentences describing the clothing's type, color, style and design."
+image_description_prompt=STYLIST_PROMPT
 
 image_metadata_df = pd.DataFrame(columns=(
   'image_uri',

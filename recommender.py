@@ -24,7 +24,13 @@ from helpers.recommender_utils import show_filter_results
 #-----------------------------------
 # Variables
 #-----------------------------------
-COSINE_SCORE_THRESHOLD = 0.65
+GEMINI_MODEL="gemini-2.0-flash-001"
+EMBEDDING_MODEL="text-embedding-005"
+COSINE_SCORE_THRESHOLD=0.65
+TEMPERATURE=0.1
+TOP_P=0.8
+TOP_K=25
+STYLIST_PROMPT="Can you describe the clothes in the photo, including style, color, and any designs?  Make sure to only describe each individual article of clothing, and give a separate response."
 
 
 #-----------------------------------
@@ -46,12 +52,8 @@ if "google.colab" not in sys.modules:
 
 vertexai.init(project=PROJECT_ID, location=LOCATION)
 
-#multimodal_model = GenerativeModel("gemini-1.0-pro-vision")
-#multimodal_model = GenerativeModel("gemini-1.5-pro-002")
-#multimodal_model = GenerativeModel("gemini-1.5-flash-002")
 multimodal_model = GenerativeModel(
-        "gemini-2.0-flash-001",
-        #"gemini-1.5-pro-002",
+        GEMINI_MODEL,
         system_instruction=[
             "You are a fashion stylist.",
             "Your mission is to describe the clothing you see.",
@@ -128,11 +130,10 @@ def get_text_embedding_from_text_embedding_model(
     """
     client = genai.Client()
     response = client.models.embed_content(
-        #model="text-embedding-005",
-        model="text-embedding-large-exp-03-07",
+        model=EMBEDDING_MODEL,
         contents=text,
         config=EmbedContentConfig(
-            task_type="RETRIEVAL_DOCUMENT",
+            task_type="RETRIEVAL_QUERY",
             output_dimensionality=768,
         )
     )
@@ -243,9 +244,9 @@ def get_user_query_text_embeddings(user_query: str) -> np.ndarray:
 def get_reference_image_description(image_filename: str) -> list:
   # Use a more deterministic configuration with a low temperature
   generation_config = GenerationConfig(
-    temperature=0.0,
-    top_p=0.8,
-    top_k=20,
+    temperature=TEMPERATURE,
+    top_p=TOP_P,
+    top_k=TOP_K,
     candidate_count=1,	# reponse
     max_output_tokens=512,
   )
@@ -255,7 +256,7 @@ def get_reference_image_description(image_filename: str) -> list:
 
   response = multimodal_model.generate_content(
     [
-        "Can you describe the clothes in the photo, including type of clothing, color, style, and design.  Make sure to only describe each individual article of clothing, and give a separate response.",
+        STYLIST_PROMPT,
         image
     ],
     generation_config=generation_config
@@ -293,7 +294,7 @@ hat_word_list=[' hat', ' cap', ' fedora', ' beanie']
 jacket_word_list=[' jacket', ' coat', ' parka', ' blazer', ' vest']
 sweater_word_list=[' sweater', ' hoodie']
 shirt_word_list=[' t-shirt', ' shirt', ' tank top']
-pant_word_list=[' pants', ' jeans', ' sweatpants', ' shorts', ' chinos', ' khakis']
+pant_word_list=[' pants', ' jeans', ' sweatpants', ' shorts', ' chinos', ' khakis', 'trousers']
 shoe_word_list=[' shoes', ' sneakers', ' loafers', ' clogs']
 clothing_list=[hat_word_list, jacket_word_list, sweater_word_list, shirt_word_list, pant_word_list, shoe_word_list]
 
