@@ -1,336 +1,292 @@
 #! /usr/bin/env python3
+"""
+Outfit Recommender CLI Tool.
 
-import os, sys
+This script provides a command-line interface (CLI) to recommend outfits from a
+pre-processed wardrobe based on an input image. It leverages Vertex AI for image
+description generation and text embeddings to find similar items.
 
-import vertexai
-from vertexai.generative_models import (
-    Content,
-    GenerationConfig,
-    GenerationResponse,
-    GenerativeModel,
-    Image,
-    Part,
-)
-
-from google import genai
-from google.genai.types import EmbedContentConfig
-
-from helpers.image_utils import image_resize
-from helpers.recommender_utils import any_list_element_in_string
-from helpers.recommender_utils import get_cosine_score
-from helpers.recommender_utils import show_filter_results
-
-
-#-----------------------------------
-# Variables
-#-----------------------------------
-GEMINI_MODEL="gemini-2.0-flash-001"
-EMBEDDING_MODEL="text-embedding-005"
-COSINE_SCORE_THRESHOLD=0.65
-TEMPERATURE=0.1
-TOP_P=0.8
-TOP_K=25
-STYLIST_PROMPT="Can you describe the clothes in the photo, including style, color, and any designs?  Make sure to only describe each individual article of clothing, and give a separate response."
-
-
-#-----------------------------------
-# Initialize Vertex AI & Gemini
-#-----------------------------------
-PROJECT_ID = os.environ.get('MY_PROJECT_ID')  # @param {type:"string"}
-LOCATION = "us-central1"  # @param {type:"string"}
-
-# if not running on colab, try to get the PROJECT_ID automatically
-if "google.colab" not in sys.modules:
-    import subprocess
-
-    PROJECT_ID = subprocess.check_output(
-        ["gcloud", "config", "get-value", "project"], text=True
-    ).strip()
-
-#print(f"Your project ID is: {PROJECT_ID}")
-
-
-vertexai.init(project=PROJECT_ID, location=LOCATION)
-
-multimodal_model = GenerativeModel(
-        GEMINI_MODEL,
-        system_instruction=[
-            "You are a fashion stylist.",
-            "Your mission is to describe the clothing you see.",
-        ],
-)
-
-#-----------------------------------------
-# Helper Functions
-#-----------------------------------------
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+Workflow:
+1. Initializes Vertex AI services.
+2. Loads the wardrobe data (embeddings and metadata) from a CSV file.
+3. Takes an input image path and (optionally) the number of recommendations per description.
+4. Generates textual descriptions for the input image using a multimodal AI model.
+5. Filters these descriptions to keep only those relevant to defined clothing categories.
+6. For each relevant description, queries the wardrobe data to find similar items based on
+   embedding cosine similarity.
+7. Displays the top N recommended items from the wardrobe, showing their images and details.
+"""
+import os
+import sys
+import logging # For logging status and errors
+import time # For retry delays
+from typing import Any, Dict, List
 
 import pandas as pd
-import numpy as np
+import numpy as np # For potential use in imported functions
 
-def generate_text(image_uri: str, prompt: str) -> str:
-    # Query the model
-    response = multimodal_model.generate_content(
-        [
-            Part.from_image(Image.load_from_file(image_uri)),
-            prompt,
-        ]
-    )
-    #print(response)
-    return response.text
+# Config imports
+from config import (
+    COSINE_SCORE_THRESHOLD, # Used by get_similar_text_from_query
+    STYLIST_PROMPT_GENERAL, # Default prompt for generating image descriptions
+    WARDROBE_CSV_FILE,      # Path to the wardrobe data CSV
+)
 
+# Helper imports
+from helpers.image_utils import image_resize
+from helpers.recommender_utils import get_cosine_score, show_filter_results
+from helpers.clothing_utils import CLOTHING_CATEGORIES, any_list_element_in_string
 
-def get_image_embedding_from_multimodal_embedding_model(
-    image_uri: str,
-    embedding_size: int = 512,
-    text: Optional[str] = None,
-    return_array: Optional[bool] = False,
-) -> list:
-    """Extracts an image embedding from a multimodal embedding model.
-    The function can optionally utilize contextual text to refine the embedding.
+# Vertex AI utilities
+from vertex_ai_utils import (
+    init_vertex_ai,
+    generate_text,
+    get_text_embedding_from_text_embedding_model,
+)
+
+#-----------------------------------
+# Core Recommender Functions
+#-----------------------------------
+
+def get_reference_image_description(image_filename: str, stylist_prompt: str) -> List[str]:
+    """
+    Generates textual descriptions for a given image using a stylist prompt.
+
+    The image is first resized. Then, a multimodal model generates descriptions,
+    which are subsequently split into a list.
 
     Args:
-        image_uri (str): The URI (Uniform Resource Identifier) of the image to process.
-        text (Optional[str]): Optional contextual text to guide the embedding generation. Defaults to "".
-        embedding_size (int): The desired dimensionality of the output embedding. Defaults to 512.
-        return_array (Optional[bool]): If True, returns the embedding as a NumPy array.
-        Otherwise, returns a list. Defaults to False.
+        image_filename: Path to the input image file.
+        stylist_prompt: The prompt to guide the AI model in generating descriptions.
 
     Returns:
-        list: A list containing the image embedding values. If `return_array` is True, returns a NumPy array instead.
+        A list of generated textual descriptions for the image.
+        Returns an empty list if description generation fails or the response is empty.
+        
+    Raises:
+        Propagates exceptions from `image_resize` or `generate_text` if they occur.
     """
-    image = vision_model_Image.load_from_file(image_uri)
-    embeddings = multimodal_embedding_model.get_embeddings(
-        image=image, contextual_text=text, dimension=embedding_size
-    )  # 128, 256, 512, 1408
-    image_embedding = embeddings.image_embedding
+    logging.info(f"Resizing image: {image_filename}")
+    resized_image_file = image_resize(image_filename, 1280) # Standard resize dimension
+    
+    logging.info(f"Generating descriptions for: {resized_image_file} using prompt: '{stylist_prompt[:50]}...'")
+    response_text = generate_text(
+        image_uri=resized_image_file,
+        prompt=stylist_prompt,
+        # System instruction is handled by the shared model in vertex_ai_utils
+    )
+    
+    # Split descriptions, which might be separated by double newlines or just newlines.
+    # Filter out empty strings that might result from splitting.
+    if response_text:
+        output_descriptions = [desc.strip() for desc in response_text.split('\n\n') if desc.strip()]
+        if not output_descriptions: # If split by \n\n failed or resulted in no content, try single \n
+            output_descriptions = [desc.strip() for desc in response_text.split('\n') if desc.strip()]
+        logging.debug(f"Generated descriptions for {image_filename}: {output_descriptions}")
+        return output_descriptions
+    else:
+        logging.warning(f"No response text from generate_text for {image_filename}.")
+        return []
 
-    if return_array:
-        image_embedding = np.fromiter(image_embedding, dtype=float)
-
-    return image_embedding
-
-
-def get_text_embedding_from_text_embedding_model(
-    text: str,
-    return_array: Optional[bool] = False,
-) -> list:
+def filter_image_descriptions(descriptions: List[str], clothing_categories: List[List[str]]) -> List[str]:
     """
-    Generates a numerical text embedding from a provided text input using a text embedding model.
+    Filters a list of image descriptions to keep only those relevant to specified clothing categories.
 
     Args:
-        text: The input text string to be embedded.
-        return_array: If True, returns the embedding as a NumPy array.
-                      If False, returns the embedding as a list. (Default: False)
+        descriptions: A list of textual descriptions.
+        clothing_categories: A list of lists, where each inner list contains keywords for a clothing category.
 
     Returns:
-        list or numpy.ndarray: A 768-dimensional vector representation of the input text.
-                               The format (list or NumPy array) depends on the
-                               value of the 'return_array' parameter.
+        A list of descriptions that contain keywords from at least one clothing category.
     """
-    client = genai.Client()
-    response = client.models.embed_content(
-        model=EMBEDDING_MODEL,
-        contents=text,
-        config=EmbedContentConfig(
-            task_type="RETRIEVAL_QUERY",
-            output_dimensionality=768,
-        )
-    )
+    valid_queries: List[str] = []
+    if not descriptions:
+        logging.debug("No descriptions provided to filter.")
+        return valid_queries
 
-    text_embedding = response.embeddings[0].values
-
-    if return_array:
-        text_embedding = np.fromiter(text_embedding, dtype=float)
-
-    return text_embedding
-
+    for desc in descriptions:
+        num_clothing_types = any_list_element_in_string(clothing_categories, desc)
+        logging.debug(f"Clothing types found in description '{desc}': {num_clothing_types}")
+        if num_clothing_types > 0: # Keep if it mentions at least one clothing type
+            valid_queries.append(desc)
+        else:
+            logging.info(f"Description removed (no relevant categories): '{desc}'")
+    return valid_queries
 
 def get_similar_text_from_query(
     query: str,
     text_metadata_df: pd.DataFrame,
-    column_name: str = "",
-    top_n: int = 3,
-    chunk_text: bool = True,
-    print_citation: bool = False,
+    column_name: str = "image_description_text_embedding", # Default column for embeddings
+    top_n: int = 3
 ) -> Dict[int, Dict[str, Any]]:
     """
-    Finds the top N most similar text passages from a metadata DataFrame based on a text query.
+    Finds the top N most similar items from a wardrobe DataFrame based on a query description.
+
+    Similarity is determined by cosine similarity between the query embedding and
+    pre-calculated embeddings in the DataFrame.
 
     Args:
-        query: The text query used for finding similar passages.
-        text_metadata_df: A Pandas DataFrame containing the text metadata to search.
-        column_name: The column name in the text_metadata_df containing the text embeddings or text itself.
-        top_n: The number of most similar text passages to return.
-        embedding_size: The dimensionality of the text embeddings (only used if text embeddings are stored in the column specified by `column_name`).
-        chunk_text: Whether to return individual text chunks (True) or the entire page text (False).
-        print_citation: Whether to immediately print formatted citations for the matched text passages (True) or just return the dictionary (False).
+        query: The textual query (e.g., a filtered image description).
+        text_metadata_df: Pandas DataFrame containing wardrobe item metadata, including embeddings.
+                          Expected to have columns 'image_uri', 'image_description_text', and `column_name`.
+        column_name: The name of the column in `text_metadata_df` that stores the embeddings.
+        top_n: The maximum number of similar items to return.
 
     Returns:
-        A dictionary containing information about the top N most similar text passages, including cosine scores, page numbers, chunk numbers (optional), and chunk text or page text (depending on `chunk_text`).
-
+        A dictionary where keys are 0-indexed ranks and values are dictionaries
+        containing details of the matched items ('image_uri', 'image_description_text', 'cosine_score').
+        Returns an empty dictionary if no items meet the similarity threshold or if errors occur.
+        
     Raises:
-        KeyError: If the specified `column_name` is not present in the `text_metadata_df`.
+        KeyError: If the specified `column_name` (for embeddings) or other expected columns
+                  like 'image_uri', 'image_description_text' are not in `text_metadata_df`.
     """
-
     if column_name not in text_metadata_df.columns:
-        raise KeyError(f"Column '{column_name}' not found in the 'text_metadata_df'")
+        logging.error(f"Embedding column '{column_name}' not found in DataFrame.")
+        raise KeyError(f"Column '{column_name}' not found in the DataFrame.")
+    if not all(col in text_metadata_df.columns for col in ['image_uri', 'image_description_text']):
+        logging.error("DataFrame is missing required columns: 'image_uri' or 'image_description_text'.")
+        raise KeyError("DataFrame is missing required columns: 'image_uri' or 'image_description_text'.")
 
-    #query_vector = get_user_query_text_embeddings(query)
-    query_vector = get_text_embedding_from_text_embedding_model(text=query)
+    logging.debug(f"Generating embedding for query: '{query[:100]}...'")
+    # Assuming get_text_embedding_from_text_embedding_model returns List[float] by default
+    query_embedding_list = get_text_embedding_from_text_embedding_model(text=query, return_array=False)
+    if not query_embedding_list: # Check if embedding generation failed
+        logging.warning(f"Failed to generate embedding for query: {query}")
+        return {}
+    query_vector = np.array(query_embedding_list, dtype=float)
 
-    # Calculate cosine similarity between query text and metadata text
+
+    logging.debug("Calculating cosine scores against wardrobe data...")
     cosine_scores = text_metadata_df.apply(
         lambda row: get_cosine_score(
-            row,
+            row, # Pass the entire row (Series)
             column_name,
             query_vector,
         ),
-        axis=1,
+        axis=1, # Apply per row
     )
 
-    # Get top N cosine scores and their indices
-    top_n_indices = cosine_scores.nlargest(top_n).index.tolist()
-    top_n_scores = cosine_scores.nlargest(top_n).values.tolist()
+    # Get top N cosine scores that are also above or equal to the threshold
+    relevant_indices = cosine_scores[cosine_scores >= COSINE_SCORE_THRESHOLD].nlargest(top_n).index
+    
+    final_results: Dict[int, Dict[str, Any]] = {}
+    for i, index in enumerate(relevant_indices):
+        final_results[i] = {
+            "image_uri": text_metadata_df.loc[index, "image_uri"],
+            "image_description_text": text_metadata_df.loc[index, "image_description_text"],
+            "cosine_score": cosine_scores[index], # Use the actual score from the Series
+        }
+    
+    if not final_results:
+        logging.info(f"No items found meeting similarity criteria for query: '{query[:100]}...'")
+    return final_results
 
-    # Create a dictionary to store matched text and their information
-    final_text: Dict[int, Dict[str, Any]] = {}
-
-    for matched_textno, index in enumerate(top_n_indices):
-        # Create a sub-dictionary for each matched text
-        final_text[matched_textno] = {}
-
-        # Store page number
-        final_text[matched_textno]["image_uri"] = text_metadata_df.iloc[index]["image_uri"]
-
-        # Store page number
-        final_text[matched_textno]["image_description_text"] = text_metadata_df.iloc[index]["image_description_text"]
-
-        # Store cosine score
-        final_text[matched_textno]["cosine_score"] = top_n_scores[matched_textno]
-        #print(top_n_scores[matched_textno])
-
-    # Optionally print citations immediately
-    if print_citation:
-        print_text_to_text_citation(final_text, chunk_text=chunk_text)
-
-    if top_n_scores[matched_textno] < COSINE_SCORE_THRESHOLD:  # if cosine score is < threshold, return no matches/empty dict
-        return {}
-
-    return final_text
-
-
-def get_user_query_text_embeddings(user_query: str) -> np.ndarray:
+#-----------------------------------------
+# CLI Workflow Orchestration
+#-----------------------------------------
+def recommend_outfits_cli(image_path: str, num_recommendations: int) -> None:
     """
-    Extracts text embeddings for the user query using a text embedding model.
+    Orchestrates the command-line interface workflow for outfit recommendations.
+
+    Loads wardrobe data, processes the input image to get descriptions, filters them,
+    queries for similar items, and displays the results.
 
     Args:
-        user_query: The user query text.
-        embedding_size: The desired embedding size.
-
-    Returns:
-        A NumPy array representing the user query text embedding.
+        image_path: Path to the input image for which to recommend outfits.
+        num_recommendations: The number of recommendations to show for each relevant description.
     """
+    try:
+        # Ensure embeddings are loaded as lists of floats
+        wardrobe_df = pd.read_csv(
+            WARDROBE_CSV_FILE,
+            converters={
+                "image_description_text_embedding": lambda x: [float(i) for i in x.strip("[]").split(",")]
+            }
+        )
+        logging.info(f"Successfully loaded wardrobe data from '{WARDROBE_CSV_FILE}'.")
+    except FileNotFoundError:
+        # Using print for direct CLI feedback on critical errors
+        print(f"ERROR: Wardrobe data file '{WARDROBE_CSV_FILE}' not found. Please run embed_wardrobe.py first.")
+        return
+    except Exception as e:
+        print(f"ERROR: Could not load or parse wardrobe data from '{WARDROBE_CSV_FILE}'. Details: {e}")
+        return
+
+    if wardrobe_df.empty:
+        print(f"WARNING: Wardrobe data ('{WARDROBE_CSV_FILE}') is empty. No recommendations possible.")
+        return
+
+    logging.info(f"Processing image for CLI recommendation: {image_path}")
     
-    print(user_query)
+    raw_descriptions: List[str] = []
+    retry_count = 0
+    max_retries = 3 # Max attempts to get image descriptions
 
-    return get_text_embedding_from_text_embedding_model(user_query)
+    while retry_count < max_retries:
+        try:
+            raw_descriptions = get_reference_image_description(image_path, STYLIST_PROMPT_GENERAL)
+            if raw_descriptions: # If successful, exit retry loop
+                break
+        except Exception as e:
+            logging.error(f"Error getting reference image description (attempt {retry_count + 1}/{max_retries}): {e}")
+        
+        retry_count += 1
+        if retry_count < max_retries:
+            logging.info(f"Retrying reference image description generation (attempt {retry_count + 1}/{max_retries})...")
+            time.sleep(1) # Brief pause before retrying
+            
+    if not raw_descriptions:
+        print(f"Could not generate reference descriptions for '{image_path}' after {max_retries} attempts.")
+        return
 
+    filtered_descriptions = filter_image_descriptions(raw_descriptions, CLOTHING_CATEGORIES)
+
+    if not filtered_descriptions:
+        print("No relevant clothing descriptions could be extracted from the input image after filtering.")
+        return
+
+    # User-facing CLI output starts here
+    print(f"\n=== Recommendations for {os.path.basename(image_path)} ===")
+    for i, query_desc in enumerate(filtered_descriptions):
+        print(f"\n--- Based on your item's description: \"{query_desc}\" ---")
+        
+        try:
+            recommendations = get_similar_text_from_query(
+                query=query_desc,
+                text_metadata_df=wardrobe_df,
+                top_n=num_recommendations
+            )
+        except KeyError as e: # Catch if expected columns are missing from DataFrame
+            print(f"Error: DataFrame is missing an expected column. Details: {e}")
+            # Stop further processing for this description if DataFrame structure is wrong
+            continue 
+            
+        if recommendations:
+            # show_filter_results is designed for CLI and uses print for user output
+            show_filter_results(recommendations) 
+        else:
+            print("No matching items found in your wardrobe for this particular description.")
 
 #-----------------------------------------
-# Extract & store metadata of images
+# Main Execution Block (CLI Entry Point)
 #-----------------------------------------
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    init_vertex_ai() # Initialize Vertex AI services
 
-def get_reference_image_description(image_filename: str) -> list:
-  # Use a more deterministic configuration with a low temperature
-  generation_config = GenerationConfig(
-    temperature=TEMPERATURE,
-    top_p=TOP_P,
-    top_k=TOP_K,
-    candidate_count=1,	# reponse
-    max_output_tokens=512,
-  )
+    if len(sys.argv) < 2:
+        # Using print for CLI usage instructions
+        print("Usage: python recommender.py <image_path> [num_recommendations]")
+        print("Example: python recommender.py static/images/input_image.jpg 3")
+        sys.exit(1)
 
-  IMAGE_FILE = image_resize(image_filename, 1280)
-  image = Image.load_from_file(IMAGE_FILE)
+    cli_image_path = sys.argv[1]
+    # Default to 1 recommendation if not specified
+    cli_num_recommendations = int(sys.argv[2]) if len(sys.argv) > 2 else 1 
 
-  response = multimodal_model.generate_content(
-    [
-        STYLIST_PROMPT,
-        image
-    ],
-    generation_config=generation_config
-  )
-
-  output_description_text = response.text.split('\n\n')
-  print(f"DEBUG DESCRIPTION: {output_description_text}")
-  return output_description_text
-
-
-#-----------------------------------------
-# Extract & store metadata of images
-#-----------------------------------------
-import glob, sys
-import pprint
-
-from vertexai.language_models import TextEmbeddingModel
-from vertexai.vision_models import Image as vision_model_Image
-from vertexai.vision_models import MultiModalEmbeddingModel
-
-# for embedding
-text_embedding_model = TextEmbeddingModel.from_pretrained("text-embedding-005")
-
-
-# CSV more precise than JSON
-# skipping first column as that's an additional column number
-# GOTCHA: the column in the CSV that gets read in is read as a string rather than a list of vectors :(
-image_metadata_df_csv = pd.read_csv("mywardrobe.csv",converters={"image_description_text_embedding": lambda x: x.strip("[]").split(", ")})
-print('=== FINDING BEST MATCHES... ===')
-
-
-# list of clothing type and common words associated with each
-# used to determine if multiple clothing types are referenced in the same description
-hat_word_list=[' hat', ' cap', ' fedora', ' beanie']
-jacket_word_list=[' jacket', ' coat', ' parka', ' blazer', ' vest']
-sweater_word_list=[' sweater', ' hoodie']
-shirt_word_list=[' t-shirt', ' shirt', ' tank top']
-pant_word_list=[' pants', ' jeans', ' sweatpants', ' shorts', ' chinos', ' khakis', 'trousers']
-shoe_word_list=[' shoes', ' sneakers', ' loafers', ' clogs']
-clothing_list=[hat_word_list, jacket_word_list, sweater_word_list, shirt_word_list, pant_word_list, shoe_word_list]
-
-
-# add a retry for generating descriptions
-# try to ensure it generates separate descriptions for each article of clothing
-retry_count = 0
-while retry_count < 5:
-  queries = get_reference_image_description(sys.argv[1])
-
-  # filter out responses that have more than 1 clothing type listed
-  for query in queries:
-    num_clothing_types=any_list_element_in_string(clothing_list, query)
-    print(f"DEBUG NUM_CLOTHING_TYPES: {num_clothing_types}")
-    if num_clothing_types == 0:
-      print("INFO: ", num_clothing_types, query)
-      queries.remove(query)
-
-  if len(queries) == 0:
-    retry_count += 1
-  else:
-    break
-
-
-item_num = 0
-for query in queries: 
-  find_match = get_similar_text_from_query(
-    query,
-    image_metadata_df_csv,
-    column_name = "image_description_text_embedding",
-    top_n=int(sys.argv[2]) if len(sys.argv) > 2 else int(1),
-    chunk_text = False,
-  )
-  
-  print("ITEM: ", item_num)
-  print("ITEM DESCRIPTION: ", query)
-  show_filter_results(find_match)
-
-  item_num +=1
+    if not os.path.exists(cli_image_path):
+        print(f"ERROR: Image path '{cli_image_path}' does not exist.")
+        sys.exit(1)
+        
+    recommend_outfits_cli(cli_image_path, cli_num_recommendations)

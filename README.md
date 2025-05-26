@@ -1,71 +1,103 @@
-# MR Stylist
-[**M**]ultimodal [**R**]AG **Stylist** is my (prototype) clothing recommender built using Gemini's multimodal capabilites and Retrieval-Augmented Generation (RAG) to reduce halucination.
+# MR Stylist - Multimodal RAG Fashion Recommender
 
-This prototype can easily be adapted for furniture/interior designs and perhaps groceries to provide alternatives for recipes.
+[**M**]ultimodal [**R**]AG **Stylist** is a prototype clothing recommender built using Gemini's multimodal capabilities and a Retrieval-Augmented Generation (RAG)-like approach to find similar clothing items from a user's wardrobe.
 
-`v0.3.0` is being submitted for the **Devpost/Google AI Hackathon**.  I've posted a [demo on YouTube](https://www.youtube.com/watch?v=g3WcuO87FUI&ab_channel=GlenYu).
+This prototype can be adapted for other domains like furniture/interior design recommendations or even suggesting recipe alternatives based on available groceries.
 
+`v0.4.0` (post-refactor) has been updated for better code organization and maintainability. A demo of an earlier version (`v0.3.0`) is available on [YouTube](https://www.youtube.com/watch?v=g3WcuO87FUI).
+
+## Code Organization
+
+The project has been refactored for improved modularity:
+-   **`config.py`**: Centralizes all shared configurations, such as AI model names, file paths, and model parameters.
+-   **`vertex_ai_utils.py`**: Manages all interactions with Google Cloud Vertex AI, including client initialization (handling `PROJECT_ID` and `LOCATION` dynamically or from `config.py`), model loading (as singletons), and core AI functionalities like text generation and embedding.
+-   **`helpers/` directory**: Contains utility modules:
+    -   **`clothing_utils.py`**: Defines clothing category keywords and functions for text-based clothing type identification.
+    -   **`image_utils.py`**: Provides image processing utilities, primarily for resizing.
+    -   **`recommender_utils.py`**: Includes helper functions for the recommendation process, like calculating cosine similarity and displaying CLI results.
+-   **Core Scripts**:
+    -   `embed_wardrobe.py`: Processes wardrobe images to create embeddings.
+    -   `recommender.py`: Offers a CLI tool for getting recommendations.
+    -   `main.py`: Runs a Flask web application for an interactive experience.
+
+This structure enhances readability, maintainability, and separation of concerns.
 
 ## Setup
-- enable Google Cloud APIs:
+
+### 1. Google Cloud Configuration
+-   Enable necessary Google Cloud APIs:
+    ```bash
+    gcloud services enable \
+      cloudresourcemanager.googleapis.com \
+      aiplatform.googleapis.com
+    ```
+-   Authenticate with Google Cloud:
+    ```bash
+    gcloud auth application-default login
+    # Set your project ID for quota and billing purposes
+    gcloud auth application-default set-quota-project [YOUR_GCP_PROJECT_ID]
+    ```
+    Alternatively, you can set the `PROJECT_ID` in `config.py` or as an environment variable `MY_PROJECT_ID`. The `LOCATION` for Vertex AI services is also configured in `config.py`.
+
+### 2. Python Dependencies
+-   Install the required Python packages:
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+### 3. Download Sample Images (Optional)
+-   Sample wardrobe images can be downloaded using:
+    ```bash
+    wget https://storage.googleapis.com/public-file-server/genai-downloads/mr-stylist-images.tar.gz
+    tar -xzf mr-stylist-images.tar.gz
+    ```
+    This will create a `static/images/` folder. You can replace these with your own clothing images. This path is configurable in `config.py` (`IMAGE_URI_PATH`).
+-   The `people/` folder (if you download the tarball) contains sample images for the CLI recommender.
+
+## Running the Scripts
+
+### 1. Create Vector Embeddings for Your Wardrobe
+The `embed_wardrobe.py` script processes all images in the configured wardrobe image directory (`static/images/` by default), generates textual descriptions and their corresponding vector embeddings, and saves this data into a CSV file (`mywardrobe.csv` by default). This CSV acts as the knowledge base for your wardrobe.
+
+-   **To run:**
+    ```bash
+    python embed_wardrobe.py
+    ```
+-   **Configuration**:
+    -   The input image path (`IMAGE_URI_PATH`) and output CSV file (`WARDROBE_CSV_FILE`) can be modified in `config.py`.
+    -   The script uses models and parameters defined in `config.py` and managed by `vertex_ai_utils.py`.
+
+You can also download pre-generated wardrobe embeddings (ensure the model name in the CSV matches the `EMBEDDING_MODEL` in `config.py` for best results):
+```bash
+# Example for text-embedding-005 (current default)
+wget https://storage.googleapis.com/public-file-server/genai-downloads/mywardrobe_2-0-flash_768.csv -O mywardrobe.csv
 ```
-gcloud services enable \
-  cloudresourcemanager.googleapis.com \
-  aiplatform.googleapis.com
-```
 
-- authenticate
-```
-gcloud auth application-default login
-gcloud auth application-default set-quota-project [YOUR_GCP_PROJECT_ID]
-```
+### 2. Get Recommendations via CLI (`recommender.py`)
+The `recommender.py` script provides a command-line interface to get outfit recommendations. It takes an image of a person or a look you want to replicate and suggests items from your processed wardrobe.
 
+-   **To run:**
+    ```bash
+    python recommender.py <path_to_your_input_image> [number_of_recommendations_per_item]
+    ```
+    -   Example: `python recommender.py people/model_10.JPG 2` (This would return the top 2 matching items from your wardrobe for each piece of clothing identified in `model_10.JPG`).
+-   **Note**: For best results, use input images showing the full body, as partially visible items (e.g., cropped pants) might be misinterpreted.
 
-- install Python dependencies:
-```
-pip install -r requirements.txt
-```
+### 3. Run the Flask Web Application (`main.py`)
+The `main.py` script launches a Flask web server, providing an interactive UI to upload an image and receive recommendations.
 
-- download images:
-```
-wget https://storage.googleapis.com/public-file-server/genai-downloads/mr-stylist-images.tar.gz
-```
+-   **To run:**
+    ```bash
+    python main.py
+    ```
+-   The application will typically be available at **`http://0.0.0.0:8080`**.
+-   Upload an image of a look you're interested in, and the app will display recommended items from your wardrobe.
+-   The upload folder (`UPLOAD_FOLDER`) and allowed file extensions (`ALLOWED_EXTENSIONS`) are configured in `config.py`.
 
-**NOTE:** the `static/images/` folder contains images from some of my clothing, but please feel free to add more of (or replace with) your own.  It also is the path used by the index.html template 
+## Future Development (TODO)
+-   Fine-tuning of prompts and model parameters for improved accuracy.
+-   Incorporate image vector similarity (e.g., using Vertex AI Vision multimodal embeddings directly for image-to-image search) in addition to text-based similarity for potentially more nuanced results.
+-   Transition from CSV-based wardrobe storage to a dedicated vector database (e.g., Vertex AI Vector Search) for scalability and more efficient querying, especially for larger wardrobes.
+-   Deploy the application components (Flask app, embedding generation) to Google Cloud resources like Cloud Run, App Engine, or GKE.
 
-**NOTE 2:** the `people/` folder contains images of celebrities/clothing models, but again, please feel free to Google search your own
-
-
-### Create Vector Embeddings for Wardrobe 
-`embed_wardrobe.py` will create vector embeddings of each piece of clothing in the `static/images/` folder and write it to a CSV file. This is inefficient and for prototyping/local testing purposes only. Future state will include a vector database deployed in the cloud (GCP).
-
-You can optionally download the wardrobe embeddings I created here and rename the file to `mywardrobe.csv`:
-```
-wget https://storage.googleapis.com/public-file-server/genai-downloads/mywardrobe_1-0-pro-vision_768.csv
-
-wget https://storage.googleapis.com/public-file-server/genai-downloads/mywardrobe_1-5-pro_768.csv
-
-wget https://storage.googleapis.com/public-file-server/genai-downloads/mywardrobe_2-0-flash_768.csv
-```
-
-Currently, Gemini 2.0 Flash is being used by `main.py` as well as `recommender.py`.  Having seen the progression from Gemini 1.0 Pro Vision, to Gemini 1.5 Pro and now (most recently) Gemini 2.0 Flash, I can definitively say that I've seen an improvement in the matches, especially in the shoes department.
-
-
-### How to run
-There are 2 ways to run MR Stylist:
-
-Running `main.py` will start a Flask front end which you can reach at **http://localhost:80** where you can upload an image of the look you are trying to replicate.  This will return the top result based on the wardrobe you provided. 
-
-The second method is to run`recommender.py`, which takes 2 arguments, the first is an image of a model/celeb/influencer you would like to replicate the "look" of. The second is the number of results you would like to see (i.e. `1` for top result)
-
-- i.e. `python recommender.py people/model_10.JPG 2`  to return top 2 results for each article of clothing it detected in the submitted photo.
-
-
-**NOTE:** for best results, try to use models which show the full body (head to toe) as pants that are cropped out in the photo have a high chance of being interpretted as shorts.
-
-
-## TODO
-- tuning / improve accuracy 
-- combine with image vector embedding similarity results to produce more accurate results
-- deploy to GCP resources
-- use a vector database
+This refactoring provides a solid foundation for these future enhancements.

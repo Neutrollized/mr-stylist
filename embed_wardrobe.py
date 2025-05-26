@@ -1,162 +1,175 @@
 #! /usr/bin/env python3
+"""
+Embed Wardrobe Script.
 
-import os, sys
+This script processes images from a specified directory, generates textual descriptions
+and embeddings for each image using Vertex AI models, and saves this metadata
+into a CSV file. This CSV file serves as the "wardrobe database" for the
+recommendation system.
 
-import vertexai
-from vertexai.generative_models import (
-    Content,
-    GenerationConfig,
-    GenerationResponse,
-    GenerativeModel,
-    Image,
-    Part,
+Key functionalities:
+- Initializes Vertex AI services.
+- Scans a directory for images.
+- For each image:
+    - Resizes the image.
+    - Generates a textual description using a multimodal AI model.
+    - Generates a numerical embedding for the description using a text embedding model.
+- Saves the collected data (image URI, description, embedding) into a CSV file.
+- Includes a delay between processing images to respect API rate limits.
+"""
+import os
+# import sys # sys is no longer used directly in this script
+import logging # For logging status and errors
+import glob
+import time
+from typing import Dict, List, Union # For type hinting
+
+import pandas as pd
+import numpy as np # For potential use if embeddings were returned as np.ndarray and needed specific handling
+
+from config import (
+    STYLIST_PROMPT_EMBED, # Prompt specific for generating embeddings
+    IMAGE_URI_PATH,        # Path to wardrobe images
+    WARDROBE_CSV_FILE,     # Output CSV filename
+    # AI model names (GEMINI_MODEL, EMBEDDING_MODEL) and parameters (TEMPERATURE, etc.)
+    # are used by vertex_ai_utils.py, so not directly imported here.
+    # PROJECT_ID and LOCATION are also handled by vertex_ai_utils.py.
 )
 
-from google import genai
-from google.genai.types import EmbedContentConfig
-
-
-#-----------------------------------
-# Variables
-#-----------------------------------
-GEMINI_MODEL="gemini-2.0-flash-001"
-EMBEDDING_MODEL="text-embedding-005"
-TEMPERATURE=0.1
-TOP_P=0.8
-TOP_K=25
-STYLIST_PROMPT="Provide a few sentences describing the clothing's type, color, and style"
-
-
-#-----------------------------------
-# Initialize Vertex AI & Gemini
-#-----------------------------------
-PROJECT_ID = os.environ.get('MY_PROJECT_ID')  # @param {type:"string"}
-LOCATION = "us-central1"  # @param {type:"string"}
-
-# if not running on colab, try to get the PROJECT_ID automatically
-if "google.colab" not in sys.modules:
-    import subprocess
-
-    PROJECT_ID = subprocess.check_output(
-        ["gcloud", "config", "get-value", "project"], text=True
-    ).strip()
-
-print(f"Your project ID is: {PROJECT_ID}")
-
-
-vertexai.init(project=PROJECT_ID, location=LOCATION)
-
-multimodal_model = GenerativeModel(
-        GEMINI_MODEL,
-        system_instruction=[
-            "You are a fashion stylist.",
-            "Your mission is to describe the clothing you see.",
-        ],
-)
-
-
-#-----------------------------------------
-# Helper Functions
-#-----------------------------------------
-import json
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 from helpers.image_utils import image_resize
-
-
-# Use a more deterministic configuration with a low temperature
-# https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/gemini
-generation_config = GenerationConfig(
-    temperature=TEMPERATURE,		# higher = more creative (default 0.0)
-    top_p=TOP_P,			# higher = more random responses, response drawn from more possible next tokens (default 0.95)
-    top_k=TOP_K,			# higher = more random responses, sample from more possible next tokens (default 40)
-    candidate_count=1,
-    max_output_tokens=2048,
+from vertex_ai_utils import (
+    init_vertex_ai,
+    generate_text,
+    get_text_embedding_from_text_embedding_model,
+    # No direct need for get_multimodal_model or get_generation_config here,
+    # as they are encapsulated within generate_text.
 )
 
+#-----------------------------------
+# Initialize Vertex AI (called once at script start)
+#-----------------------------------
+init_vertex_ai()
+# logging.info(f"Vertex AI Initialized with Project ID: {vertex_ai_utils.get_project_id()}") # Example
 
-def generate_text(image_uri: str, prompt: str) -> str:
-    # Query the model
-    response = multimodal_model.generate_content(
-        [
-            Part.from_image(Image.load_from_file(image_uri)),
-            prompt,
-        ],
-        generation_config=generation_config,
-    )
-    return response.text
-
-
-def get_text_embedding_from_text_embedding_model(
-    text: str,
-    return_array: Optional[bool] = False,
-) -> list:
+#-----------------------------------------
+# Function to Process a Single Image
+#-----------------------------------------
+def process_image_for_wardrobe(image_file_path: str, stylist_prompt: str) -> Dict[str, Union[str, List[float]]]:
     """
-    Generates a numerical text embedding from a provided text input using a text embedding model.
+    Processes a single image: resizes, generates description, and creates embedding.
 
     Args:
-        text: The input text string to be embedded.
-        return_array: If True, returns the embedding as a NumPy array.
-                      If False, returns the embedding as a list. (Default: False)
+        image_file_path: The absolute or relative path to the image file.
+        stylist_prompt: The prompt to use for generating the image description.
 
     Returns:
-        list or numpy.ndarray: A 768-dimensional vector representation of the input text.
-                               The format (list or NumPy array) depends on the
-                               value of the 'return_array' parameter.
+        A dictionary containing the processed image data:
+        {
+            'image_uri': str,  // The path to the (potentially resized) image.
+            'image_description_text': str, // The generated textual description.
+            'image_description_text_embedding': List[float] // The numerical embedding of the description.
+        }
+        Returns an empty dictionary if a critical error occurs during processing.
+        
+    Raises:
+        FileNotFoundError: If the image_file_path does not exist (handled by image_resize).
+        Exception: Propagates exceptions from AI model calls or image processing if not handled within.
     """
-    client = genai.Client()
-    response = client.models.embed_content(
-        model=EMBEDDING_MODEL,
-        contents=text,
-        config=EmbedContentConfig(
-            task_type="RETRIEVAL_QUERY",  # Optional
-            output_dimensionality=768,  # Optional
-        ),
-    )
+    logging.info(f"Processing image: {image_file_path}")
+    
+    try:
+        # Resize the image (modifies in place and returns path)
+        resized_image_file_path = image_resize(image_file_path, 1024) 
+        
+        # Generate text description using the shared multimodal model and generation config
+        description_text = generate_text(
+            image_uri=resized_image_file_path,
+            prompt=stylist_prompt,
+        )
+        
+        # Generate text embedding for the description
+        # This function returns Union[List[float], np.ndarray]. We expect List[float] by default.
+        embedding_result = get_text_embedding_from_text_embedding_model(
+            text=description_text,
+            return_array=False # Explicitly ensuring List[float]
+        )
+        # Ensure it's a list, as np.ndarray is not directly JSON serializable for Pandas to_csv as easily
+        if isinstance(embedding_result, np.ndarray):
+            image_description_text_embedding: List[float] = embedding_result.tolist()
+        else:
+            image_description_text_embedding: List[float] = embedding_result
 
-    text_embedding = response.embeddings[0].values
-
-    if return_array:
-        text_embedding = np.fromiter(text_embedding, dtype=float)
-
-    return text_embedding
-
+        return {
+            'image_uri': resized_image_file_path,
+            'image_description_text': description_text,
+            'image_description_text_embedding': image_description_text_embedding,
+        }
+    except FileNotFoundError as fnf_error:
+        logging.error(f"File not found error for {image_file_path}: {fnf_error}")
+        raise # Re-raise to be caught by the main loop's error handler
+    except Exception as e:
+        logging.error(f"Failed to process image {image_file_path}: {e}")
+        raise # Re-raise to be caught by the main loop's error handler
 
 #-----------------------------------------
-# Extract & store metadata of images
+# Main Script Execution
 #-----------------------------------------
-import glob
-import pandas as pd
-import time
+def main() -> None:
+    """
+    Main function to find images in the specified directory, process each image
+    to generate descriptions and embeddings, and save this metadata to a CSV file.
+    """
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.info("Starting wardrobe embedding process...")
+    
+    wardrobe_data_list: List[Dict[str, Union[str, List[float]]]] = []
+    
+    # Define glob patterns for common image extensions.
+    # Using os.path.join for platform-independent path construction.
+    # Configurable via ALLOWED_EXTENSIONS from config.py if needed in future.
+    image_extensions = ["*.JPG", "*.jpg", "*.jpeg", "*.JPEG", "*.png", "*.PNG"]
+    image_files_to_process: List[str] = []
+    for ext in image_extensions:
+        pattern = os.path.join(IMAGE_URI_PATH, ext)
+        image_files_to_process.extend(glob.glob(pattern))
 
-image_description_prompt=STYLIST_PROMPT
+    if not image_files_to_process:
+        logging.warning(f"No images found in '{IMAGE_URI_PATH}' with patterns {image_extensions}. Exiting.")
+        return
 
-image_metadata_df = pd.DataFrame(columns=(
-  'image_uri',
-  'image_description_text',
-  'image_description_text_embedding',
-))
+    logging.info(f"Found {len(image_files_to_process)} images to process.")
 
-image_uri_path = 'static/images/'
-image_count = 0
+    for image_path in image_files_to_process:
+        try:
+            processed_data = process_image_for_wardrobe(image_path, STYLIST_PROMPT_EMBED)
+            if processed_data: # Ensure data was actually processed
+                wardrobe_data_list.append(processed_data)
+                logging.info(f"Successfully processed: {image_path}")
+        except Exception as e:
+            # Error is already logged in process_image_for_wardrobe,
+            # but we can add context here or decide to skip the image.
+            logging.error(f"Skipping image {image_path} due to error during its processing: {e}")
+        
+        # API call delay - consider making this configurable
+        # For a small number of images, this might be very slow.
+        # For larger batches, this helps manage rate limits.
+        logging.info("Waiting for 8 seconds before next API call...")
+        time.sleep(8) 
+        
+    if not wardrobe_data_list:
+        logging.warning("No data was successfully processed. Output CSV will be empty or not created.")
+        return
 
-for image in list(glob.glob(image_uri_path + '/' + '*.JPG')):
-  IMAGE = image_resize(image, 1024)
-  print("processing: ", IMAGE)
+    # Create Pandas DataFrame from the list of dictionaries
+    image_metadata_df = pd.DataFrame(wardrobe_data_list)
+    
+    # Save DataFrame to CSV
+    try:
+        image_metadata_df.to_csv(WARDROBE_CSV_FILE, index=False)
+        logging.info(f"Wardrobe metadata saved to {WARDROBE_CSV_FILE}")
+        # logging.info(image_metadata_df.head()) # Print head for quick check
+    except Exception as e:
+        logging.error(f"Error saving DataFrame to CSV '{WARDROBE_CSV_FILE}': {e}")
 
-  description_text = generate_text(
-    image_uri=IMAGE,
-    prompt=image_description_prompt,
-  )
-
-  image_description_text_embedding = (
-    get_text_embedding_from_text_embedding_model(text=description_text)
-  )
-  
-  image_metadata_df.loc[image_count] = [IMAGE, description_text, image_description_text_embedding]
-  image_count += 1
-  time.sleep(8)		# to avoid hitting Gemini quota
- 
-
-image_metadata_df.to_csv('mywardrobe.csv')
-
-print(image_metadata_df)
+if __name__ == "__main__":
+    main()
